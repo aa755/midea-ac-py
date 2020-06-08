@@ -235,7 +235,7 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
     async def async_set_temperature(self, **kwargs):
         """Set new target temperatures."""
         if kwargs.get(ATTR_TEMPERATURE) is not None:
-            self._device.target_temperature = int(kwargs.get(ATTR_TEMPERATURE))
+            self._device.target_temperature = (kwargs.get(ATTR_TEMPERATURE))
             self._changed = True
             await self.apply_changes()
 
