@@ -16,7 +16,7 @@ from homeassistant.components.climate import ClimateDevice, PLATFORM_SCHEMA
 from homeassistant.components.climate.const import (
     SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE,
     SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST)
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, \
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, TEMP_FAHRENHEIT, \
     ATTR_TEMPERATURE
 
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -79,6 +79,8 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         if include_off_as_state:
             self._operation_list.append("off")
         self._support_flags = SUPPORT_FLAGS
+        #the LED display on the AC should use the same unit as that in homeassistant
+        device.farenheit_unit = (hass.config.units.temperature_unit == TEMP_FAHRENHEIT)
         self._device = device
         self._unit_of_measurement = TEMP_CELSIUS
         self._target_temperature_step = temp_step
