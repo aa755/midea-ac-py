@@ -84,10 +84,10 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         device.farenheit_unit = (hass.config.units.temperature_unit == TEMP_FAHRENHEIT)
         self._udpsend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._udprecv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._port = 2000+ device.id % 256
+        self._port = 2000+ (int(device.id, base=16) % 256)
         self._udprecv.bind(('0.0.0.0', self._port))
         self._to_send=bytearray()
-        self._to_send.extend([0x00, device.id % 256])
+        self._to_send.extend([0x00, int(device.id, base=16) % 256])
         self._addr = (device.ip, 6655)
         self._udpsend.sendto(self._to_send, self._addr)
         self._device = device
@@ -100,11 +100,11 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._old_state = None
         self._changed = False
 
-    def udprefresh():
-        data, addr = self._udprecv.recvfrom(31)
-        device.update(finectrl=False)
+    def udprefresh(self):
+        resp, addr = self._udprecv.recvfrom(31)
+        self._device.updateha(resp)
 
-    def udpapply():
+    def udpapply(self):
         self.udpsend.sendto(self._to_send)
 
     async def apply_changes(self):
