@@ -105,7 +105,7 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._device.updateha(resp)
 
     def udpapply(self):
-        self.udpsend.sendto(self._to_send)
+        self._udpsend.sendto(self._to_send, self._addr)
 
     async def apply_changes(self):
         if not self._changed:
@@ -211,15 +211,15 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
     @property
     def hvac_mode(self):
         """Return current operation ie. heat, cool, idle."""
-        if self._old_state is not None:
-            from msmart.device import air_conditioning_device as ac
-            self._device.power_state = self._include_off_as_state and self._old_state.state != 'off'
-            if self._old_state.state in ac.operational_mode_enum.list():
-                self._device.operational_mode = ac.operational_mode_enum[self._old_state.state]
-            return self._old_state.state
+        # if self._old_state is not None:
+        #     from msmart.device import air_conditioning_device as ac
+        #     self._device.power_state = self._include_off_as_state and self._old_state.state != 'off'
+        #     if self._old_state.state in ac.operational_mode_enum.list():
+        #         self._device.operational_mode = ac.operational_mode_enum[self._old_state.state]
+        #     return self._old_state.state
 
-        if self._include_off_as_state and not self._device.power_state:
-            return "off"
+        # if self._include_off_as_state and not self._device.power_state:
+        #     return "off"
         return self._device.operational_mode.name
 
     @property
@@ -252,28 +252,31 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         if kwargs.get(ATTR_TEMPERATURE) is not None:
             temp=kwargs.get(ATTR_TEMPERATURE)
             self._to_send[0]=2# this change may get overwritten. put it in a queue or udpsend it in this function
-            self._to_send[1]= 2*(temp-16.0)
+            self._to_send[1]= int(2.0*(temp-16.0))
             self._changed = True
             await self.apply_changes()
 
     async def async_set_swing_mode(self, swing_mode):
         """Set new target temperature."""
+        from msmart.device import air_conditioning_device as ac
         self._to_send[0]=6
-        self._to_send[1]=ac.swing_mode_enum[swing_mode]
+        self._to_send[1]=ac.swing_mode_enum[swing_mode].value
         self._changed = True
         await self.apply_changes()
 
     async def async_set_fan_mode(self, fan_mode):
         """Set new target temperature."""
+        from msmart.device import air_conditioning_device as ac
         self._to_send[0]=5
-        self._to_send[1]=ac.fan_speed_enum[fan_mode]
+        self._to_send[1]=ac.fan_speed_enum[fan_mode].value
         self._changed = True
         await self.apply_changes()
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target temperature."""
+        from msmart.device import air_conditioning_device as ac
         self._to_send[0]=3
-        self._to_send[1]=ac.operational_mode_enum[hvac_mode]
+        self._to_send[1]=ac.operational_mode_enum[hvac_mode].value
         self._changed = True
         await self.apply_changes()
 
