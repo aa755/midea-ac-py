@@ -8,6 +8,7 @@ This is still early work in progress
 """
 import logging
 
+import socket
 import voluptuous as vol
 from datetime import timedelta
 
@@ -56,7 +57,7 @@ async def async_setup_platform(hass, config, async_add_entities,
     use_fan_only_workaround = config.get(CONF_USE_FAN_ONLY_WORKAROUND)
 
     client = midea_device(device_ip, int(device_id))
-    device = client.setup()
+    device = client.setup() # doesnt make any connection to serial
     entities = []
     entities.append(MideaClimateACDevice(
             hass, device, temp_step, include_off_as_state,
@@ -81,6 +82,14 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._support_flags = SUPPORT_FLAGS
         #the LED display on the AC should use the same unit as that in homeassistant
         device.farenheit_unit = (hass.config.units.temperature_unit == TEMP_FAHRENHEIT)
+        self._udpsend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._udprecv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._port = 2000+ device.id % 256
+        self._udprecv.bind(('0.0.0.0', self._port))
+        self._to_send=bytearray()
+        self._to_send.extend([0x00, device.id % 256])
+        self._addr = (device.ip, 6655)
+        self._udpsend.sendto(self._to_send, self._addr)
         self._device = device
         self._unit_of_measurement = TEMP_CELSIUS
         self._target_temperature_step = temp_step
@@ -91,10 +100,17 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._old_state = None
         self._changed = False
 
+    def udprefresh():
+        data, addr = self._udprecv.recvfrom(31)
+        device.update(finectrl=False)
+
+    def udpapply():
+        self.udpsend.sendto(self._to_send)
+
     async def apply_changes(self):
         if not self._changed:
             return
-        await self.hass.async_add_executor_job(self._device.apply)
+        await self.hass.async_add_executor_job(self.udpapply)
         self._old_state = None
         await self.async_update_ha_state()
         self._changed = False
@@ -103,11 +119,11 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         """Retrieve latest state from the appliance if no changes made,
         otherwise update the remote device state."""
         if self._changed:
-            await self.hass.async_add_executor_job(self._device.apply)
+            await self.hass.async_add_executor_job(self.udpapply)
             self._changed = False
         elif not self._use_fan_only_workaround:
             self._old_state = None
-            await self.hass.async_add_executor_job(self._device.refresh)
+            await self.hass.async_add_executor_job(self.udprefresh)
 
     async def async_added_to_hass(self):
         """Run when entity about to be added."""
@@ -234,46 +250,39 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
     async def async_set_temperature(self, **kwargs):
         """Set new target temperatures."""
         if kwargs.get(ATTR_TEMPERATURE) is not None:
-            self._device.target_temperature = (kwargs.get(ATTR_TEMPERATURE))
+            temp=kwargs.get(ATTR_TEMPERATURE)
+            self._to_send[0]=2# this change may get overwritten. put it in a queue or udpsend it in this function
+            self._to_send[1]= 2*(temp-16.0)
             self._changed = True
             await self.apply_changes()
 
     async def async_set_swing_mode(self, swing_mode):
         """Set new target temperature."""
-        from msmart.device import air_conditioning_device as ac
-        self._device.swing_mode = ac.swing_mode_enum[swing_mode]
+        self._to_send[0]=6
+        self._to_send[1]=ac.swing_mode_enum[swing_mode]
         self._changed = True
         await self.apply_changes()
 
     async def async_set_fan_mode(self, fan_mode):
         """Set new target temperature."""
-        from msmart.device import air_conditioning_device as ac
-        self._device.fan_speed = ac.fan_speed_enum[fan_mode]
+        self._to_send[0]=5
+        self._to_send[1]=ac.fan_speed_enum[fan_mode]
         self._changed = True
         await self.apply_changes()
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target temperature."""
-        from msmart.device import air_conditioning_device as ac
-        if self._include_off_as_state and hvac_mode == "off":
-            self._device.power_state = False
-        else:
-            if self._include_off_as_state:
-                self._device.power_state = True
-            self._device.operational_mode = ac.operational_mode_enum[hvac_mode]
+        self._to_send[0]=3
+        self._to_send[1]=ac.operational_mode_enum[hvac_mode]
         self._changed = True
         await self.apply_changes()
 
     async def async_set_preset_mode(self, preset_mode: str):
-        if preset_mode == PRESET_NONE:
-            self._device.eco_mode = False
-            self._device.turbo_mode = False
-        elif preset_mode == PRESET_BOOST:
-            self._device.eco_mode = False
-            self._device.turbo_mode = True
-        elif preset_mode == PRESET_ECO:
-            self._device.turbo_mode = False
-            self._device.eco_mode = True
+        self._to_send[0]=4
+        if preset_mode == PRESET_BOOST:
+            self._to_send[1]=1
+        else:
+            self._to_send[1]=0
 
         self._changed = True
         await self.apply_changes()
@@ -304,13 +313,15 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
 
     async def async_turn_on(self):
         """Turn on."""
-        self._device.power_state = True
+        self._to_send[0]=1
+        self._to_send[1]=1
         self._changed = True
         await self.apply_changes()
 
     async def async_turn_off(self):
         """Turn off."""
-        self._device.power_state = False
+        self._to_send[0]=1
+        self._to_send[1]=0
         self._changed = True
         await self.apply_changes()
 
