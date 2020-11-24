@@ -16,7 +16,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.components.climate import ClimateDevice, PLATFORM_SCHEMA
 from homeassistant.components.climate.const import (
     SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE,
-    SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST)
+    SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST, SUPPORT_AUX_HEAT)
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, TEMP_FAHRENHEIT, \
     ATTR_TEMPERATURE
 
@@ -30,7 +30,7 @@ CONF_TEMP_STEP = 'temp_step'
 CONF_INCLUDE_OFF_AS_STATE = 'include_off_as_state'
 CONF_USE_FAN_ONLY_WORKAROUND = 'use_fan_only_workaround'
 
-SCAN_INTERVAL = timedelta(seconds=15)
+SCAN_INTERVAL = timedelta(seconds=10)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_HOST): cv.string,
@@ -41,7 +41,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE \
-                | SUPPORT_SWING_MODE | SUPPORT_PRESET_MODE
+                | SUPPORT_SWING_MODE | SUPPORT_PRESET_MODE | SUPPORT_AUX_HEAT
 
 
 async def async_setup_platform(hass, config, async_add_entities,
@@ -96,15 +96,20 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._target_temperature_step = temp_step
         self._include_off_as_state = include_off_as_state
         self._use_fan_only_workaround = use_fan_only_workaround
+        self._device._finectrl=False
 
         self.hass = hass
         self._old_state = None
         self._changed = False
 
     def udprefresh(self):
-        resp, addr = self._udprecv.recvfrom(32)
-        if len(resp)==32 and resp[31]==199:
-            self._device.updateha(resp)
+        resp=[]
+        try:
+            while True:
+                resp, _ = self._udprecv.recvfrom(32)
+        except socket.timeout:
+            if (len(resp)==32 and resp[31]==199):
+                    self._device.updateha(resp)
 
     def udpapply(self):
         self._udpsend.sendto(self._to_send, self._addr)
@@ -148,6 +153,11 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
     def supported_features(self):
         """Return the list of supported features."""
         return self._support_flags
+
+    @property
+    def is_aux_heat(self):
+        """Return the supported step of target temperature."""
+        return self._device._finectrl
 
     @property
     def target_temperature_step(self):
@@ -196,19 +206,30 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
     @property
     def current_temperature(self):
         """Return the current temperature."""
+        ret=80
         if self._old_state is not None:
-            return self._old_state.attributes.get('current_temperature')
-
-        return self._device.indoor_temperature
+            ret=self._old_state.attributes.get('current_temperature')
+        else:
+            ret = self._device.indoor_temperature
+        if (ret < 100):
+            return ret
+        else:
+            return 80
 
     @property
     def target_temperature(self):
         """Return the temperature we try to reach."""
+        ret=80
         if self._old_state is not None and 'temperature' in self._old_state.attributes:
             self._device.target_temperature = self._old_state.attributes['temperature']
-            return self._old_state.attributes['temperature']
+            ret = self._old_state.attributes['temperature']
+        else:
+            ret = self._device.target_temperature
+        if (ret < 100):
+            return ret
+        else:
+            return 80
 
-        return self._device.target_temperature
 
     @property
     def hvac_mode(self):
@@ -321,6 +342,22 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._to_send[0]=1
         self._to_send[1]=1
         self._changed = True
+        await self.apply_changes()
+
+    async def async_turn_aux_heat_on(self):
+        """Turn on."""
+        self._to_send[0]=7
+        self._to_send[1]=1
+        self._changed = True
+        self._device._finectrl=True
+        await self.apply_changes()
+
+    async def async_turn_aux_heat_off(self):
+        """Turn on."""
+        self._to_send[0]=7
+        self._to_send[1]=0
+        self._changed = True
+        self._device._finectrl=False
         await self.apply_changes()
 
     async def async_turn_off(self):
