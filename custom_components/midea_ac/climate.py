@@ -298,8 +298,13 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target temperature."""
         from msmart.device import air_conditioning_device as ac
-        self._to_send[0]=3
-        self._to_send[1]=ac.operational_mode_enum[hvac_mode].value
+        if self._include_off_as_state and hvac_mode == "off":
+            self._device.power_state = False
+            self._to_send[0]=1
+            self._to_send[1]=0
+        else:
+            self._to_send[0]=3
+            self._to_send[1]=ac.operational_mode_enum[hvac_mode].value
         self._changed = True
         await self.apply_changes()
 
