@@ -84,12 +84,12 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         device.farenheit_unit = (hass.config.units.temperature_unit == TEMP_FAHRENHEIT)
         self._udpsend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._udprecv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._port = 2000+ (int(device.id, base=16) % 256)
+        self._port = (int(device.id))%10000
         self._udprecv.bind(('0.0.0.0', self._port))
         self._udprecv.settimeout(1)
         self._to_send=bytearray()
-        self._to_send.extend([0x00, int(device.id, base=16) % 256])
-        self._addr = (device.ip, 6655)
+        self._to_send.extend([0x00, 0x00])
+        self._addr = (device.ip, self._port)
         self._udpsend.sendto(self._to_send, self._addr)
         self._device = device
         self._unit_of_measurement = TEMP_CELSIUS
@@ -241,8 +241,8 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         #         self._device.operational_mode = ac.operational_mode_enum[self._old_state.state]
         #     return self._old_state.state
 
-        # if self._include_off_as_state and not self._device.power_state:
-        #     return "off"
+        if self._include_off_as_state and not self._device.power_state:
+            return "off"
         return self._device.operational_mode.name
 
     @property
