@@ -96,7 +96,7 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
         self._target_temperature_step = temp_step
         self._include_off_as_state = include_off_as_state
         self._use_fan_only_workaround = use_fan_only_workaround
-        self._device._finectrl=False
+        self._device._finectrl=True
 
         self.hass = hass
         self._old_state = None
@@ -104,12 +104,15 @@ class MideaClimateACDevice(ClimateDevice, RestoreEntity):
 
     def udprefresh(self):
         resp=[]
+        lastresp=[]
         try:
             while True:
                 resp, _ = self._udprecv.recvfrom(32)
+                if (len(resp)==32 and resp[31]==199):
+                    lastresp=resp
         except socket.timeout:
-            if (len(resp)==32 and resp[31]==199):
-                    self._device.updateha(resp)
+            if (len(lastresp)==32 and lastresp[31]==199):
+                    self._device.updateha(lastresp)
 
     def udpapply(self):
         self._udpsend.sendto(self._to_send, self._addr)
