@@ -13,7 +13,7 @@ import voluptuous as vol
 from datetime import timedelta
 
 import homeassistant.helpers.config_validation as cv
-from homeassistant.components.climate import ClimateDevice, PLATFORM_SCHEMA
+from homeassistant.components.climate import ClimateEntity, PLATFORM_SCHEMA
 from homeassistant.components.climate.const import (
     SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE,
     SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST, SUPPORT_AUX_HEAT)
@@ -66,7 +66,7 @@ async def async_setup_platform(hass, config, async_add_entities,
     async_add_entities(entities)
 
 
-class MideaClimateACDevice(ClimateDevice, RestoreEntity):
+class MideaClimateACDevice(ClimateEntity, RestoreEntity):
     """Representation of a Midea climate AC device."""
 
     def __init__(self, hass, device, temp_step: float,
