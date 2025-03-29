@@ -5,6 +5,7 @@ For more details about this platform, please refer to the documentation
 https://github.com/mac-zhou/midea-ac-py
 
 This is still early work in progress
+https://github.com/georgezhao2010/midea_ac_lan/pull/420/files
 """
 import logging
 
@@ -13,13 +14,41 @@ import voluptuous as vol
 from datetime import timedelta
 
 import homeassistant.helpers.config_validation as cv
-from homeassistant.components.climate import ClimateEntity, PLATFORM_SCHEMA
-from homeassistant.components.climate.const import (
-    SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE,
-    SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST)
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, TEMP_FAHRENHEIT, \
-    ATTR_TEMPERATURE
-
+from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
+    PLATFORM_SCHEMA,
+    ClimateEntity,
+    ClimateEntityFeature,
+    FAN_AUTO,
+    FAN_HIGH,
+    FAN_LOW,
+    FAN_MEDIUM,
+    HVACMode,
+    PRESET_AWAY,
+    PRESET_BOOST,
+    PRESET_COMFORT,
+    PRESET_ECO,
+    PRESET_NONE,
+    PRESET_SLEEP,
+    SWING_BOTH,
+    SWING_HORIZONTAL,
+    SWING_OFF,
+    SWING_ON,
+    SWING_VERTICAL,
+)
+from homeassistant.const import (
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    MAJOR_VERSION,
+    MINOR_VERSION,
+    Platform,
+    UnitOfTemperature,
+    PRECISION_WHOLE,
+    PRECISION_HALVES,
+    ATTR_TEMPERATURE,
+    CONF_DEVICE_ID,
+    CONF_SWITCHES,
+)
 from homeassistant.helpers.restore_state import RestoreEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,9 +68,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_INCLUDE_OFF_AS_STATE, default=True): vol.Coerce(bool),
     vol.Optional(CONF_USE_FAN_ONLY_WORKAROUND, default=False): vol.Coerce(bool)
 })
-
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE \
-                | SUPPORT_SWING_MODE | SUPPORT_PRESET_MODE
 
 
 async def async_setup_platform(hass, config, async_add_entities,
@@ -79,9 +105,8 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
         self._swing_list = ac.swing_mode_enum.list()
         if include_off_as_state:
             self._operation_list.append("off")
-        self._support_flags = SUPPORT_FLAGS
         #the LED display on the AC should use the same unit as that in homeassistant
-        device.farenheit_unit = (hass.config.units.temperature_unit == TEMP_FAHRENHEIT)
+        device.farenheit_unit = (hass.config.units.temperature_unit == UnitOfTemperature.FAHRENHEIT)
         self._udpsend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._udprecv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._port = (int(device.id))%10000
@@ -92,7 +117,6 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
         self._addr = (device.ip, self._port)
         self._udpsend.sendto(self._to_send, self._addr)
         self._device = device
-        self._unit_of_measurement = TEMP_CELSIUS
         self._target_temperature_step = temp_step
         self._include_off_as_state = include_off_as_state
         self._use_fan_only_workaround = use_fan_only_workaround
@@ -122,7 +146,7 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
             return
         await self.hass.async_add_executor_job(self.udpapply)
         self._old_state = None
-        await self.async_update_ha_state()
+        self.async_write_ha_state()
         self._changed = False
 
     async def async_update(self):
@@ -154,9 +178,15 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
 
     @property
     def supported_features(self):
-        """Return the list of supported features."""
-        return self._support_flags
-
+        features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE |
+            ClimateEntityFeature.FAN_MODE |
+            ClimateEntityFeature.PRESET_MODE |
+            ClimateEntityFeature.SWING_MODE
+        )
+        if (MAJOR_VERSION, MINOR_VERSION) >= (2024, 2):
+            features |= ClimateEntityFeature.TURN_OFF | ClimateEntityFeature.TURN_ON
+        return features
 
     @property
     def target_temperature_step(self):
@@ -200,7 +230,7 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
     @property
     def temperature_unit(self):
         """Return the unit of measurement."""
-        return self._unit_of_measurement
+        return UnitOfTemperature.CELSIUS
 
     @property
     def current_temperature(self):
