@@ -16,7 +16,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.components.climate import ClimateEntity, PLATFORM_SCHEMA
 from homeassistant.components.climate.const import (
     SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE,
-    SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST, SUPPORT_AUX_HEAT)
+    SUPPORT_PRESET_MODE, PRESET_NONE, PRESET_ECO, PRESET_BOOST)
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, TEMP_FAHRENHEIT, \
     ATTR_TEMPERATURE
 
@@ -41,7 +41,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_FAN_MODE \
-                | SUPPORT_SWING_MODE | SUPPORT_PRESET_MODE | SUPPORT_AUX_HEAT
+                | SUPPORT_SWING_MODE | SUPPORT_PRESET_MODE
 
 
 async def async_setup_platform(hass, config, async_add_entities,
@@ -157,10 +157,6 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
         """Return the list of supported features."""
         return self._support_flags
 
-    @property
-    def is_aux_heat(self):
-        """Return the supported step of target temperature."""
-        return self._device._finectrl
 
     @property
     def target_temperature_step(self):
@@ -350,22 +346,6 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
         self._to_send[0]=1
         self._to_send[1]=1
         self._changed = True
-        await self.apply_changes()
-
-    async def async_turn_aux_heat_on(self):
-        """Turn on."""
-        self._to_send[0]=7
-        self._to_send[1]=1
-        self._changed = True
-        self._device._finectrl=True
-        await self.apply_changes()
-
-    async def async_turn_aux_heat_off(self):
-        """Turn on."""
-        self._to_send[0]=7
-        self._to_send[1]=0
-        self._changed = True
-        self._device._finectrl=False
         await self.apply_changes()
 
     async def async_turn_off(self):
