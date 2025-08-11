@@ -110,7 +110,8 @@ class MideaClimateACDevice(ClimateEntity, RestoreEntity):
         self._udpsend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._udprecv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._port = (int(device.id))%10000
-        self._udprecv.bind(('0.0.0.0', self._port))
+        bind_port = self._port + 1 if device.ip in ("localhost", "127.0.0.1") else self._port
+        self._udprecv.bind(('0.0.0.0', bind_port))
         self._udprecv.settimeout(1)
         self._to_send=bytearray()
         self._to_send.extend([0x00, 0x00])
